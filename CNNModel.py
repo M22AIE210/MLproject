@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 from torch.utils.tensorboard import SummaryWriter
 from sklearn.metrics import precision_recall_curve, average_precision_score
 import numpy as np
+import torch.nn.functional as F
 
 train_dataset = datasets.USPS(root='./data', train=True, download=True, transform=transforms.ToTensor())
 test_dataset = datasets.USPS(root='./data', train=False, download=True, transform=transforms.ToTensor())
@@ -19,23 +20,65 @@ else:
   device = "cpu"
 
 train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-
-class Model_CNN(nn.Module):
+test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
+class Model_CNN_v1(nn.Module):
     def __init__(self):
-        super(Model_CNN, self).__init__()
+        super(Model_CNN_v1, self).__init__()
+        self.conv1 = nn.Conv2d(1, 16, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv2d(16, 32, kernel_size=3, padding=1)
+        self.conv3 = nn.Conv2d(32, 64, kernel_size=3, padding=1)
+        self.pool = nn.MaxPool2d(2, 2)
+        self.fc1 = nn.Linear(64 * 4 * 4, 256)
+        self.fc2 = nn.Linear(256, 128)
+        self.fc3 = nn.Linear(128, 10)
+
+    def forward(self, x):
+        x = self.pool(F.relu(self.conv1(x)))
+        x = self.pool(F.relu(self.conv2(x)))
+        x = self.pool(F.relu(self.conv3(x)))
+        x = x.view(-1, 64 * 4 * 4)
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        x = self.fc3(x)
+        return x
+    
+class Model_CNN_v2(nn.Module):
+    def __init__(self):
+        super(Model_CNN_v2, self).__init__()
         self.conv1 = nn.Conv2d(1, 16, kernel_size=3, padding=1)
         self.pool = nn.MaxPool2d(2, 2)
         self.conv2 = nn.Conv2d(16, 32, kernel_size=3, padding=1)
+        self.dropout = nn.Dropout(0.5)
         self.fc1 = nn.Linear(32 * 4 * 4, 128)
         self.fc2 = nn.Linear(128, 10)
 
     def forward(self, x):
-        x = self.pool(torch.relu(self.conv1(x)))
-        x = self.pool(torch.relu(self.conv2(x)))
+        x = self.pool(F.relu(self.conv1(x)))
+        x = self.pool(F.relu(self.conv2(x)))
+        x = self.dropout(x)
         x = x.view(-1, 32 * 4 * 4)
-        x = torch.relu(self.fc1(x))
+        x = F.relu(self.fc1(x))
         x = self.fc2(x)
         return x
+class Model_CNN_v3(nn.Module):
+    def __init__(self):
+        super(Model_CNN_v3, self).__init__()
+        self.conv1 = nn.Conv2d(1, 16, kernel_size=3, padding=1)
+        self.bn1 = nn.BatchNorm2d(16)
+        self.pool = nn.MaxPool2d(2, 2)
+        self.conv2 = nn.Conv2d(16, 32, kernel_size=3, padding=1)
+        self.bn2 = nn.BatchNorm2d(32)
+        self.fc1 = nn.Linear(32 * 4 * 4, 128)
+        self.fc2 = nn.Linear(128, 10)
+
+    def forward(self, x):
+        x = self.pool(F.relu(self.bn1(self.conv1(x))))
+        x = self.pool(F.relu(self.bn2(self.conv2(x))))
+        x = x.view(-1, 32 * 4 * 4)
+        x = F.relu(self.fc1(x))
+        x = self.fc2(x)
+        return x
+
     
 def train(model, train_loader, test_loader, criterion, optimizer, num_epochs, device,writer):
     train_acc_history = []
@@ -104,7 +147,18 @@ def evaluate(model, dataloader, device):
     all_labels = np.concatenate(all_labels)
     return correct / total, all_predictions, all_labels
 writer = SummaryWriter()
-model = Model_CNN().to(device)
-criterion = nn.CrossEntropyLoss()
-optimizer = optim.Adam(model.parameters(), lr=0.001)
-cnn_train_acc_history, cnn_test_acc_history = train(model, train_loader, test_loader, criterion, optimizer, 10, device,writer)
+#experiment with 3 models 
+for version in ['v1','v2','v3']:
+    if version == 'v1':
+        model = Model_CNN_v1().to(device)
+    elif version == 'v2':
+        model = Model_CNN_v2().to(device)
+    elif version == 'v3':
+        model = Model_CNN_v3().to(device)
+
+    criterion = nn.CrossEntropyLoss()
+    optimizer = optim.Adam(model.parameters(), lr=0.001)
+    cnn_train_acc_history, cnn_test_acc_history = train(model, train_loader, test_loader, criterion, optimizer, 10, device,writer)
+    evaluate(model, test_loader, device)
+
+writer.close()
