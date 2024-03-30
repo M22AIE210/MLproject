@@ -1,11 +1,11 @@
 import torch
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
-import matplotlib.pyplot as plt
+
 from torch.utils.tensorboard import SummaryWriter
 from sklearn.metrics import precision_recall_curve, average_precision_score
 import numpy as np
